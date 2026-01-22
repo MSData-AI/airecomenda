@@ -6,58 +6,85 @@
   <title>Assistente</title>
 
   <style>
-    html, body { height: 100%; margin: 0; }
-    #webchat { height: 100%; width: 100%; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: Arial, sans-serif;
+    }
+
+    #webchat {
+      height: 100%;
+      width: 100%;
+    }
   </style>
 
+  <!-- Bot Framework Web Chat -->
   <script src="https://cdn.botframework.com/botframework-webchat/latest/webchat.js"></script>
 </head>
 <body>
+
   <div id="webchat"></div>
 
   <script>
-    // Troca isto pelo URL da tua Azure Function
+    // 🔁 URL da Azure Function (POST)
     const TOKEN_ENDPOINT = "https://app-msagent-recomendation-site-hvdvb3brgwd4f5fk.westeurope-01.azurewebsites.net/api/get_directline_token";
 
-    (async function init() {
+    (async function initChat() {
       try {
-        const resp = await fetch(TOKEN_ENDPOINT, { method: "GET" });
-        if (!resp.ok) throw new Error(`Token endpoint error: ${resp.status}`);
-        const { token } = await resp.json();
-        if (!token) throw new Error("Token missing in response");
+        const response = await fetch(TOKEN_ENDPOINT, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          }
+        });
 
-        const directLine = window.WebChat.createDirectLine({ token });
+        if (!response.ok) {
+          throw new Error("Erro ao obter token: " + response.status);
+        }
+
+        const data = await response.json();
+
+        if (!data.token) {
+          throw new Error("Resposta sem token");
+        }
+
+        const directLine = window.WebChat.createDirectLine({
+          token: data.token
+        });
 
         window.WebChat.renderWebChat(
           {
             directLine,
             locale: "pt-PT",
             styleOptions: {
-              linkTarget: "_self" // abre links na mesma aba (quando o renderer respeita)
+              linkTarget: "_self" // tenta abrir links na mesma aba
             }
           },
           document.getElementById("webchat")
         );
-      } catch (e) {
-        console.error(e);
+
+      } catch (err) {
+        console.error(err);
         document.getElementById("webchat").innerHTML =
-          "<div style='padding:12px;font-family:Arial'>Erro a iniciar o chat. Abre F12 → Console.</div>";
+          "<div style='padding:12px'>❌ Erro a iniciar o chat. Ver consola (F12).</div>";
       }
     })();
 
-    // Reforço: links internos Wix ("/...") abrem no topo, fora do iframe (mesma aba)
-    document.addEventListener("click", (e) => {
+    // 🔒 Reforço: links internos do Wix abrem sempre na mesma aba (fora do iframe)
+    document.addEventListener("click", function (e) {
       const a = e.target.closest("a");
       if (!a) return;
+
       const href = a.getAttribute("href");
       if (!href) return;
 
-      // Ajusta se quiseres restringir só a /my-site/
+      // Links internos (ex: /my-site/...#comp-xxx)
       if (href.startsWith("/")) {
         e.preventDefault();
         window.top.location.href = href;
       }
     }, true);
   </script>
+
 </body>
 </html>
