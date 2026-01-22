@@ -1,70 +1,58 @@
-<script>
-const API_URL = "https://173e202e69e0e7f5829e180aa12277.55.environment.api.powerplatform.com/copilotstudio/dataverse-backed/authenticated/bots/cr6d1_aiRecomenda/conversations?api-version=2022-03-01-preview";
+<!doctype html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Chat</title>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    #webchat { height: 100%; width: 100%; }
+  </style>
+  <script src="https://cdn.botframework.com/botframework-webchat/latest/webchat.js"></script>
+</head>
+<body>
+  <div id="webchat"></div>
 
-let conversationId = crypto.randomUUID();
+  <script>
+    const TOKEN_ENDPOINT = "https://<TEU-FUNCTION-APP>.azurewebsites.net/api/token";
 
-function esc(s){ return (s ?? "").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+    (async function init() {
+      try {
+        const resp = await fetch(TOKEN_ENDPOINT, { method: "GET" });
+        if (!resp.ok) throw new Error("Token endpoint error: " + resp.status);
+        const { token } = await resp.json();
 
-function addMessage(html, cls) {
-  const div = document.createElement("div");
-  div.className = cls;
-  div.innerHTML = html;
-  document.getElementById("messages").appendChild(div);
-  div.scrollIntoView({behavior:"smooth", block:"end"});
-}
+        const directLine = window.WebChat.createDirectLine({ token });
 
-addMessage("✅ Chat carregou. Escreve uma mensagem para testar a ligação ao agente.", "bot");
+        window.WebChat.renderWebChat(
+          {
+            directLine,
+            locale: "pt-PT",
+            styleOptions: {
+              linkTarget: "_self"
+            }
+          },
+          document.getElementById("webchat")
+        );
+      } catch (e) {
+        console.error(e);
+        document.getElementById("webchat").innerHTML =
+          "<div style='padding:12px;font-family:Arial'>Erro a iniciar o chat. Ver consola (F12).</div>";
+      }
+    })();
 
-async function send() {
-  const input = document.getElementById("text");
-  const text = input.value.trim();
-  if (!text) return;
+    // Links internos Wix: abre na mesma aba, fora do iframe
+    document.addEventListener("click", (e) => {
+      const a = e.target.closest("a");
+      if (!a) return;
+      const href = a.getAttribute("href");
+      if (!href) return;
 
-  addMessage(esc(text), "user");
-  input.value = "";
-
-  try {
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conversationId, input: text })
-    });
-
-    const raw = await res.text(); // para conseguires ver o corpo mesmo se não for JSON
-    let data;
-    try { data = JSON.parse(raw); } catch { data = null; }
-
-    if (!res.ok) {
-      addMessage(
-        `❌ Erro HTTP <b>${res.status}</b><br><pre style="white-space:pre-wrap;margin:6px 0 0">${esc(raw)}</pre>`,
-        "bot"
-      );
-      return;
-    }
-
-    const botText = data?.output?.text ?? data?.text ?? data?.message ?? null;
-    if (botText) addMessage(esc(botText), "bot");
-    else addMessage(`⚠️ Resposta OK mas formato inesperado:<pre style="white-space:pre-wrap;margin:6px 0 0">${esc(raw)}</pre>`, "bot");
-
-  } catch (err) {
-    addMessage(`❌ Fetch falhou (provável CORS ou rede):<br><pre style="white-space:pre-wrap;margin:6px 0 0">${esc(String(err))}</pre>`, "bot");
-  }
-}
-
-// Enter para enviar
-document.getElementById("text").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") send();
-});
-
-// Forçar links internos na mesma aba
-document.addEventListener("click", e => {
-  const a = e.target.closest("a");
-  if (!a) return;
-  const href = a.getAttribute("href");
-  if (!href) return;
-  if (href.startsWith("/")) {
-    e.preventDefault();
-    window.top.location.href = href;
-  }
-}, true);
-</script>
+      if (href.startsWith("/")) {
+        e.preventDefault();
+        window.top.location.href = href;
+      }
+    }, true);
+  </script>
+</body>
+</html>
