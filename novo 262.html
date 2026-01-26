@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mind Source Agent</title>
+
+  <script src="https://cdn.botframework.com/botframework-webchat/latest/webchat.js"></script>
+
+  <style>
+    html, body { height: 100%; margin: 0; }
+    #webchat { height: 100%; width: 100%; }
+  </style>
+</head>
+
+<body>
+  <div id="webchat"></div>
+
+  <script>
+    const tokenEndpoint = "https://app-msagent-recomendation-site-hvdvb3brg.westeurope-01.azurewebsites.net/api/get_directline_token";
+    const directLineDomain = "https://europe.directline.botframework.com/v3/directline";
+
+    function createCustomStore() {
+      return window.WebChat.createStore(
+        {},
+        ({ dispatch }) => (next) => (action) => {
+          if (action.type === "DIRECT_LINE/CONNECT_FULFILLED") {
+            dispatch({
+              type: "DIRECT_LINE/POST_ACTIVITY",
+              meta: { method: "keyboard" },
+              payload: {
+                activity: {
+                  type: "event",
+                  name: "startConversation",
+                  channelData: { postBack: true }
+                }
+              }
+            });
+          }
+          return next(action);
+        }
+      );
+    }
+
+    function forceSameTabLinks() {
+      const webchatEl = document.getElementById("webchat");
+      if (!webchatEl) return;
+
+      function scrollToIdWithWixResetProtection(id) {
+        const doc = window.top.document;
+
+        const start = Date.now();
+        const timeoutMs = 8000;
+        const intervalMs = 120;
+        const settleMs = 1800;
+
+        let firstScrolledAt = null;
+
+        const attempt = () => {
+          const el = doc.getElementById(id);
+
+          if (!el) {
+            if (Date.now() - start < timeoutMs) setTimeout(attempt, intervalMs);
+            return;
+          }
+
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+
+          if (!firstScrolledAt) firstScrolledAt = Date.now();
+
+          const elapsed = Date.now() - firstScrolledAt;
+          if (elapsed < settleMs) {
+            setTimeout(() => {
+              const rect = el.getBoundingClientRect();
+              if (Math.abs(rect.top) > 40) {
+                el.scrollIntoView({ behavior: "auto", block: "start" });
+              }
+              attempt();
+            }, 250);
+          }
+        };
+
+        attempt();
+      }
+
+      webchatEl.addEventListener("click", (event) => {
+        const a = event.target.closest("a");
+        if (!a) return;
+
+        const hrefRaw = a.getAttribute("href");
+        if (!hrefRaw) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        // Só hash
+        if (hrefRaw.startsWith("#")) {
+          window.top.history.replaceState(
+            {},
+            "",
+            window.top.location.pathname + window.top.location.search + hrefRaw
+          );
+          scrollToIdWithWixResetProtection(hrefRaw.slice(1));
+          return;
+        }
+
+        let target;
+        try {
+          target = new URL(hrefRaw, window.top.location.href);
+        } catch {
+          return;
+        }
+
+        const current = new URL(window.top.location.href);
+        const samePath = target.pathname === current.pathname;
+        const sameSearch = target.search === current.search;
+
+        // Mesma página + hash
+        if (samePath && sameSearch && target.hash) {
+          window.top.history.replaceState({}, "", target.pathname + target.search + target.hash);
+          scrollToIdWithWixResetProtection(target.hash.slice(1));
+          return;
+        }
+
+        // Outra página SPA (sem refresh)
+        window.top.history.pushState({}, "", target.pathname + target.search + target.hash);
+        window.top.dispatchEvent(new PopStateEvent("popstate"));
+
+        if (target.hash) {
+          scrollToIdWithWixResetProtection(target.hash.slice(1));
+        }
+      }, true);
+    }
+
+    async function init() {
+      const res = await fetch(tokenEndpoint, { method: "POST" });
+      const { token } = await res.json();
+
+      const directLine = window.WebChat.createDirectLine({
+        domain: directLineDomain,
+        token
+      });
+
+      window.WebChat.renderWebChat(
+        {
+          directLine,
+          locale: "pt-PT",
+          store: createCustomStore()
+        },
+        document.getElementById("webchat")
+      );
+
+      forceSameTabLinks();
+    }
+
+    init();
+  </script>
+</body>
+</html>
