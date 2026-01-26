@@ -8,12 +8,31 @@
   <script src="https://cdn.botframework.com/botframework-webchat/latest/webchat.js"></script>
 
   <style>
-    html, body { height: 100%; margin: 0; }
+    html, body { height: 100%; margin: 0; font-family: Arial, sans-serif; }
     #webchat { height: 100%; width: 100%; }
+    #status {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: white;
+      color: #222;
+      padding: 16px;
+      text-align: center;
+      z-index: 99999;
+    }
+    #status.hidden { display: none; }
+    #status pre { white-space: pre-wrap; max-width: 900px; }
   </style>
 </head>
 
 <body>
+  <div id="status"><div>
+  <div style="font-weight:700;margin-bottom:8px;">A iniciar o chat…</div>
+  <div style="opacity:.7">Se isto ficar aqui, abre F12 → Console.</div>
+  </div></div>
+
   <div id="webchat"></div>
 
   <script>
@@ -21,6 +40,21 @@
 
       const directLineDomain = "https://europe.directline.botframework.com/v3/directline";
 
+    function showError(err) {
+      console.error(err);
+      const status = document.getElementById("status");
+      status.classList.remove("hidden");
+      status.innerHTML = `
+        <div>
+          <div style="font-weight:700;margin-bottom:8px;">❌ Erro a iniciar o chat</div>
+          <pre>${String(err && err.stack ? err.stack : err)}</pre>
+          <div style="opacity:.7;margin-top:10px;">Abre F12 → Network e vê a chamada ao token endpoint.</div>
+        </div>`;
+    }
+
+    function hideStatus() {
+      document.getElementById("status").classList.add("hidden");
+    }
     function createCustomStore() {
       return window.WebChat.createStore(
         {},
@@ -135,7 +169,10 @@
 
     async function init() {
       const res = await fetch(tokenEndpoint, { method: "POST" });
-      const { token } = await res.json();
+       if (!res.ok) throw new Error("Token endpoint HTTP " + res.status + " " + await res.text());
+
+        const data = await res.json();
+        if (!data.token) throw new Error("Resposta sem token: " + JSON.stringify(data));
 
       const directLine = window.WebChat.createDirectLine({
         domain: directLineDomain,
@@ -146,7 +183,7 @@
         {
           directLine,
           locale: "pt-PT",
-          store: createCustomStore()
+          styleOptions: { linkTarget: "_self" }
         },
         document.getElementById("webchat")
       );
@@ -154,8 +191,15 @@
       forceSameTabLinks();
     }
 
+        hideStatus();
+      } catch (e) {
+        showError(e);
+      }
+    }
+    
     init();
   </script>
 </body>
 </html>
+
 
