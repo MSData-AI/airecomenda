@@ -99,61 +99,36 @@ function forceSameTabLinks() {
     window.top.dispatchEvent(new PopStateEvent("popstate"));
   }
   webchatEl.addEventListener(
-    "click",
-    function (event) {
-      const a = event.target.closest("a");
-      if (!a) return;
+  "click",
+  function (event) {
+    const a = event.target.closest("a");
+    if (!a) return;
 
-      const hrefRaw = a.getAttribute("href");
-      if (!hrefRaw) return;
+    const hrefRaw = a.getAttribute("href");
+    if (!hrefRaw) return;
 
-      event.preventDefault();
-      event.stopPropagation();
+    event.preventDefault();
+    event.stopPropagation();
 
-      // Caso 1: só hash (#comp-...)
-      if (hrefRaw.startsWith("#")) {
-        const hash = hrefRaw;
-        // atualiza URL sem refresh
-        window.top.history.replaceState(
-          {},
-          "",
-          window.top.location.pathname + window.top.location.search + hash
-        );
-        scrollToIdWithWixResetProtection(hash.slice(1));
-        return;
-      }
+    let target;
+    try {
+      target = new URL(hrefRaw, window.location.href);
+    } catch {
+      return;
+    }
 
-      // Normaliza URL (suporta /my-site/...#comp-... e links absolutos)
-      let target;
-      try {
-        target = new URL(hrefRaw, window.top.location.href);
-      } catch {
-        return;
-      }
+    // Envia para a página Wix a navegação pretendida
+    window.parent.postMessage(
+      {
+        type: "NAVIGATE",
+        href: target.pathname + target.search + target.hash
+      },
+      "*" // podes restringir depois ao domínio wix
+    );
+  },
+  true
+);
 
-      const current = new URL(window.top.location.href);
-							 
-
-      const samePath = target.pathname === current.pathname;
-      const sameSearch = target.search === current.search;
-
-      // Caso 2: mesma página + hash
-      if (samePath && sameSearch && target.hash) {
-        window.top.history.replaceState({}, "", target.pathname + target.search + target.hash);
-        scrollToIdWithWixResetProtection(target.hash.slice(1));
-        return;
-      }
-
-      // Caso 3: outra página (SPA) + hash
-      goSpa(target);
-      if (target.hash) {
-        // aqui é onde o Wix costuma resetar para o topo após render
-        scrollToIdWithWixResetProtection(target.hash.slice(1));
-      }
-    },
-    true
-  );
-}
 
 async function init() {
         const res = await fetch(tokenEndpoint, { method: "POST" });
@@ -187,3 +162,4 @@ async function init() {
     </script>
   </body>
 </html>
+
