@@ -16,160 +16,106 @@
 <body>
   <div id="webchat"></div>
 
-    <script>
-      const tokenEndpoint =
+  <script>
+    const tokenEndpoint =
         "https://app-msagent-recomendation-site-hvdvb3brgwd4f5fk.westeurope-01.azurewebsites.net/api/get_directline_token";
 
       const directLineDomain = "https://europe.directline.botframework.com/v3/directline";
 
-      function createCustomStore() {
-        return window.WebChat.createStore(
-          {},
-          ({ dispatch }) => (next) => (action) => {
-            if (action.type === "DIRECT_LINE/CONNECT_FULFILLED") {
-              dispatch({
-                type: "DIRECT_LINE/POST_ACTIVITY",
-                meta: { method: "keyboard" },
-                payload: {
-                  activity: {
-                    type: "event",
-                    name: "startConversation",
-                    channelData: { postBack: true }
-                  }
+       function createCustomStore() {
+      return window.WebChat.createStore(
+        {},
+        ({ dispatch }) => (next) => (action) => {
+          if (action.type === "DIRECT_LINE/CONNECT_FULFILLED") {
+            dispatch({
+              type: "DIRECT_LINE/POST_ACTIVITY",
+              meta: { method: "keyboard" },
+              payload: {
+                activity: {
+                  type: "event",
+                  name: "startConversation",
+                  channelData: { postBack: true }
                 }
-              });
-            }
-            return next(action);
+              }
+            });
           }
+          return next(action);
+        }
+      );
+    }
+
+    function forceSameTabLinks() {
+      const webchatEl = document.getElementById("webchat");
+      if (!webchatEl) return;
+
+      function requestNavigate(href) {
+        window.parent.postMessage(
+          { type: "NAVIGATE", href },  // ex: "/ms/sobre-nós#comp-mkvenu37"
+          "*"
         );
-		 
-		
       }
 
-function forceSameTabLinks() {
-  const webchatEl = document.getElementById("webchat");
-  if (!webchatEl) return;
+      webchatEl.addEventListener("click", function (event) {
+        const a = event.target.closest("a");
+        if (!a) return;
 
-  function scrollToIdWithWixResetProtection(id) {
-    const doc = window.top.document;
+        const hrefRaw = a.getAttribute("href");
+        if (!hrefRaw) return;
 
-    const start = Date.now();
-    const timeoutMs = 8000;     // espera até 8s pelo elemento
-    const intervalMs = 120;     // frequência de tentativas
-    const settleMs = 1800;      // janela extra para “vencer” o scroll reset do Wix
+        event.preventDefault();
+        event.stopPropagation();
 
-    let firstScrolledAt = null;
+        // Caso: só hash (#comp-...)
+        if (hrefRaw.startsWith("#")) {
+          const href = window.location.pathname + window.location.search + hrefRaw;
+          requestNavigate(href);
+          return;
+        }
 
-    const attemptScroll = () => {
-      const el = doc.getElementById(id);
+        // Normaliza links relativos e absolutos
+        let target;
+        try {
+          target = new URL(hrefRaw, window.location.href);
+        } catch {
+          return;
+        }
 
-      // Ainda não existe: continua a tentar
-      if (!el) {
-        if (Date.now() - start < timeoutMs) setTimeout(attemptScroll, intervalMs);
-        return;
-      }
+        requestNavigate(target.pathname + target.search + target.hash);
+      }, true);
+    }
 
-      // Existe: faz scroll
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-
-      // Marca o primeiro scroll
-      if (!firstScrolledAt) firstScrolledAt = Date.now();
-
-      // O Wix pode voltar a colocar no topo depois disto.
-      // Reforça o scroll durante um curto período.
-      const elapsedSinceFirst = Date.now() - firstScrolledAt;
-      if (elapsedSinceFirst < settleMs) {
-        setTimeout(() => {
-          // Se o elemento ainda não estiver perto do topo, volta a forçar
-          const rect = el.getBoundingClientRect();
-          if (Math.abs(rect.top) > 40) {
-            el.scrollIntoView({ behavior: "auto", block: "start" });		
-          }
-          attemptScroll();
-        }, 250);
-      }
-    };
-
-    attemptScroll();
-  }
-
-  // Em Wix "HTML incorporado", o conteúdo corre num iframe sandbox.
-  // Não podemos navegar o topo diretamente (window.top.*).
-  // Enviamos a navegação para a página Wix via postMessage.
-  function requestNavigate(href) {
-    window.parent.postMessage(
-      { type: "NAVIGATE", href }, // ex: "/ms/sobre-nós#comp-mkvenu37"
-      "*" // depois podes restringir para "https://jl0.wixsite.com"
-    );
-  }
-
-  webchatEl.addEventListener(
-    "click",
-    function (event) {
-      const a = event.target.closest("a");
-      if (!a) return;
-
-      const hrefRaw = a.getAttribute("href");
-      if (!hrefRaw) return;
-
-      event.preventDefault();
-      event.stopPropagation();
-
-      // Normaliza o link (aceita "#comp-...", "/ms/pagina#comp-...", e links absolutos)
-      let target;
+    async function init() {
       try {
-        target = new URL(hrefRaw, window.location.href);
-      } catch {
-        return;
-      }
-
-      // Se for só âncora, mantém a página atual e envia o hash
-      if (hrefRaw.startsWith("#")) {
-        const href = window.location.pathname + window.location.search + hrefRaw;
-        requestNavigate(href);
-        return;
-      }
-
-      // Envia pathname + search + hash para o Wix navegar na mesma aba
-      requestNavigate(target.pathname + target.search + target.hash);
-    },
-    true
-  );
-
-
-
-async function init() {
         const res = await fetch(tokenEndpoint, { method: "POST" });
-        const { token } = await res.json();
-		 
+        if (!res.ok) throw new Error("Token endpoint HTTP " + res.status);
+
+        const data = await res.json();
+        if (!data.token) throw new Error("Resposta sem token: " + JSON.stringify(data));
 
         const directLine = window.WebChat.createDirectLine({
           domain: directLineDomain,
-          token
+          token: data.token
         });
-									
-		  
-										  
-		
 
         window.WebChat.renderWebChat(
           {
             directLine,
             locale: "pt-PT",
-            store: createCustomStore()
+            store: createCustomStore(),
+            styleOptions: { linkTarget: "_self" }
           },
           document.getElementById("webchat")
         );
 
         forceSameTabLinks();
+      } catch (e) {
+        console.error(e);
+        document.getElementById("webchat").innerHTML =
+          "<div style='padding:12px;font-family:Arial'>❌ Erro a iniciar o chat. Ver consola (F12).</div>";
       }
-	   
-	   
+    }
 
-      init();
-    </script>
-  </body>
+    init();
+  </script>
+</body>
 </html>
-
-
-
