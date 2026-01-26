@@ -93,41 +93,49 @@ function forceSameTabLinks() {
     attemptScroll();
   }
 
-  function goSpa(urlObj) {
-    // navegação SPA sem refresh
-    window.top.history.pushState({}, "", urlObj.pathname + urlObj.search + urlObj.hash);
-    window.top.dispatchEvent(new PopStateEvent("popstate"));
-  }
-  webchatEl.addEventListener(
-  "click",
-  function (event) {
-    const a = event.target.closest("a");
-    if (!a) return;
-
-    const hrefRaw = a.getAttribute("href");
-    if (!hrefRaw) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    let target;
-    try {
-      target = new URL(hrefRaw, window.location.href);
-    } catch {
-      return;
-    }
-
-    // Envia para a página Wix a navegação pretendida
+  // Em Wix "HTML incorporado", o conteúdo corre num iframe sandbox.
+  // Não podemos navegar o topo diretamente (window.top.*).
+  // Enviamos a navegação para a página Wix via postMessage.
+  function requestNavigate(href) {
     window.parent.postMessage(
-      {
-        type: "NAVIGATE",
-        href: target.pathname + target.search + target.hash
-      },
-      "*" // podes restringir depois ao domínio wix
+      { type: "NAVIGATE", href }, // ex: "/ms/sobre-nós#comp-mkvenu37"
+      "*" // depois podes restringir para "https://jl0.wixsite.com"
     );
-  },
-  true
-);
+  }
+
+  webchatEl.addEventListener(
+    "click",
+    function (event) {
+      const a = event.target.closest("a");
+      if (!a) return;
+
+      const hrefRaw = a.getAttribute("href");
+      if (!hrefRaw) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      // Normaliza o link (aceita "#comp-...", "/ms/pagina#comp-...", e links absolutos)
+      let target;
+      try {
+        target = new URL(hrefRaw, window.location.href);
+      } catch {
+        return;
+      }
+
+      // Se for só âncora, mantém a página atual e envia o hash
+      if (hrefRaw.startsWith("#")) {
+        const href = window.location.pathname + window.location.search + hrefRaw;
+        requestNavigate(href);
+        return;
+      }
+
+      // Envia pathname + search + hash para o Wix navegar na mesma aba
+      requestNavigate(target.pathname + target.search + target.hash);
+    },
+    true
+  );
+
 
 
 async function init() {
@@ -162,4 +170,5 @@ async function init() {
     </script>
   </body>
 </html>
+
 
